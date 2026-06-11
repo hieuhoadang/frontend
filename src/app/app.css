@@ -1,0 +1,11 @@
+:host {
+  display: block;
+  width: 100%;
+}
+
+.card {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+}

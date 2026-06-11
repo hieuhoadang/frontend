@@ -1,0 +1,157 @@
+<main class="profile-page">
+  <div *ngIf="isLoggedIn(); else loginView" class="dashboard-shell">
+    <header class="dashboard-summary">
+      <div class="hero-left">
+        <div class="avatar-circle">
+          <span>{{ userInitial() }}</span>
+        </div>
+
+        <div class="hero-copy-group">
+          <p class="eyebrow">Account overview</p>
+          <h1>{{ displayName() }}</h1>
+          <p class="hero-copy">{{ displayUsername() }} · {{ displayRoles() }}</p>
+        </div>
+      </div>
+
+      <div class="hero-right">
+        <span class="meta-pill">Position: {{ userProfile()?.position || 'Unknown' }}</span>
+        <span class="meta-pill meta-pill--muted">{{ tableSummary().total }} total</span>
+      </div>
+    </header>
+
+    <section class="meta-panel">
+      <article class="meta-block">
+        <div class="card-heading">
+          <p class="eyebrow">Profile details</p>
+          <h2>Current identity</h2>
+        </div>
+
+        <div class="detail-list">
+          <div class="detail-item">
+            <span class="label">Username</span>
+            <span class="value">{{ displayUsername() }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="label">Full name</span>
+            <span class="value">{{ displayName() }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="label">Position</span>
+            <span class="value position-badge">{{ userProfile()?.position || 'Loading...' }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="label">Roles</span>
+            <span class="value">{{ displayRoles() }}</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="meta-block meta-block--split" *ngIf="currentRow() as current">
+        <div class="card-heading">
+          <p class="eyebrow">Selection</p>
+          <h2>Selected row</h2>
+        </div>
+
+        <div class="selection-grid">
+          <div class="selection-item">
+            <span class="label">Username</span>
+            <span class="value">{{ current.username }}</span>
+          </div>
+          <div class="selection-item">
+            <span class="label">Full name</span>
+            <span class="value">{{ current.fullName }}</span>
+          </div>
+          <div class="selection-item">
+            <span class="label">Position</span>
+            <span class="value position-badge">{{ current.position }}</span>
+          </div>
+          <div class="selection-item selection-item--full">
+            <span class="label">Roles</span>
+            <span class="value">{{ current.roles.length ? current.roles.join(', ') : 'No roles' }}</span>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="table-card">
+      <div class="card-heading card-heading--table">
+        <div>
+          <p class="eyebrow">User Table</p>
+          <h2>Main data grid</h2>
+        </div>
+
+        <div class="card-status" [class.card-status--loading]="loading()">
+          <span class="status-dot"></span>
+          {{ loading() ? 'Refreshing data' : 'Connected to ui-kit table' }}
+        </div>
+      </div>
+
+      <ss-table
+        [tableConfig]="tableConfig()"
+        [columns]="tableColumns"
+        [data]="tableData()"
+        (searchChange)="onTableSearchChange($event)"
+        (selectionChange)="onTableSelectionChange($event)"
+        (rowClick)="onTableRowClick($event)"
+        (pageChange)="onTablePageChange($event)"
+      ></ss-table>
+    </section>
+
+    <div *ngIf="error()" class="error-alert error-alert--wide">
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        class="alert-icon"
+        aria-hidden="true"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+      <span class="alert-message">{{ error() }}</span>
+    </div>
+
+    <div class="action-bar">
+      <button type="button" (click)="logout()" class="btn btn-danger">
+        <span>Đăng Xuất</span>
+      </button>
+    </div>
+  </div>
+
+  <ng-template #loginView>
+    <section class="auth-card">
+      <div class="auth-header">
+        <div class="brand-mark">SS</div>
+        <div>
+          <p class="eyebrow">Secure profile</p>
+          <h1>Smart Solution</h1>
+        </div>
+      </div>
+
+      <div *ngIf="error()" class="error-alert error-alert--inline">
+        <span class="alert-message">{{ error() }}</span>
+      </div>
+
+      <button type="button" (click)="login()" class="btn btn-primary">
+        <span>Đăng Nhập</span>
+        <svg
+          class="arrow-icon"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          viewBox="0 0 24 24"
+          aria-hidden="true"
+        >
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+          <polyline points="12 5 19 12 12 19"></polyline>
+        </svg>
+      </button>
+    </section>
+  </ng-template>
+</main>
