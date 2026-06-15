@@ -51,6 +51,7 @@ export class KeycloakService {
       console.error('Keycloak logout error:', error);
     } finally {
       this.clearToken();
+      window.location.assign(this.getLoginUrl());
     }
   }
 

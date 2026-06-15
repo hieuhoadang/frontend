@@ -1,217 +1,389 @@
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { NzButtonModule } from 'ng-zorro-antd/button';
+import { NzIconModule } from 'ng-zorro-antd/icon';
+import { NzInputModule } from 'ng-zorro-antd/input';
+import { NzModalModule } from 'ng-zorro-antd/modal';
+import { firstValueFrom } from 'rxjs';
 import {
   SsTableComponent,
-  SsTableConfig,
   SsTableColumnConfig,
+  SsTableConfig,
+  SsTableFilterChangeEvent,
   SsTablePageChangeEvent,
   SsTableRowEvent,
-  SsTableSearchChangeEvent,
   SsTableSelectionChangeEvent,
+  SsTableSearchChangeEvent,
+  SsTableSortChangeEvent,
 } from '@platform/ui-kit';
 import { environment } from '../../../environments/environment';
 import { KeycloakService } from '../../core/auth/keycloak.service';
 
-interface UserInfo {
+interface UserRow {
   username: string;
   fullName: string;
+  email: string;
   position: string;
   roles: string[];
+}
+
+interface UserDraft {
+  username: string;
+  fullName: string;
+  email: string;
+  position: string;
+  roles: string;
 }
 
 @Component({
   selector: 'app-profile-page',
   standalone: true,
-  imports: [CommonModule, SsTableComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    NzButtonModule,
+    NzIconModule,
+    NzInputModule,
+    NzModalModule,
+    SsTableComponent,
+  ],
   templateUrl: './profile.page.html',
   styleUrl: './profile.page.css',
 })
 export class ProfilePage implements OnInit {
-  protected readonly keycloakService = inject(KeycloakService);
   private readonly http = inject(HttpClient);
+  protected readonly keycloakService = inject(KeycloakService);
 
-  protected readonly isLoggedIn = signal(false);
-  protected readonly userProfile = signal<UserInfo | null>(null);
-  protected readonly tableData = signal<UserInfo[]>([]);
-  protected readonly tableSearchTerm = signal('');
-  protected readonly selectedUser = signal<UserInfo | null>(null);
-  protected readonly currentPageIndex = signal(1);
-  protected readonly currentPageSize = signal(5);
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly rows = signal<UserRow[]>([]);
+  protected readonly total = signal(0);
+  protected readonly currentUser = signal<UserRow | null>(null);
+  protected readonly selectedRows = signal<UserRow[]>([]);
+  protected readonly tableSearchTerm = signal('');
+  protected readonly pageIndex = signal(1);
+  protected readonly pageSize = signal(5);
+  protected readonly editorVisible = signal(false);
+  protected readonly editorMode = signal<'create' | 'edit' | 'detail'>('detail');
+  protected readonly editorLoading = signal(false);
+  protected readonly editorOriginalUsername = signal('');
+  protected readonly editorDraft = signal<UserDraft>({
+    username: '',
+    fullName: '',
+    email: '',
+    position: 'USER',
+    roles: '',
+  });
 
-  protected readonly tableColumns: SsTableColumnConfig<UserInfo>[] = [
+  protected readonly rowActions = [
+    {
+      label: 'Chi tiết',
+      icon: 'eye',
+      type: 'link' as const,
+      onClick: (row: UserRow) => this.openDetail(row),
+    },
+    {
+      label: 'Sửa',
+      icon: 'edit',
+      type: 'default' as const,
+      onClick: (row: UserRow) => this.openEdit(row),
+    },
+    {
+      label: 'Xóa',
+      icon: 'delete',
+      type: 'default' as const,
+      onClick: (row: UserRow) => this.deleteRow(row),
+      class: 'danger-action',
+    },
+  ];
+
+  protected readonly tableColumns: SsTableColumnConfig<UserRow>[] = [
     { key: 'username', header: 'Username', sortable: true, width: '180px' },
-    { key: 'fullName', header: 'Full name', sortable: true, width: '240px' },
+    { key: 'fullName', header: 'Full name', sortable: true, width: '220px' },
+    { key: 'email', header: 'Email', type: 'email', sortable: true, width: '240px' },
     {
       key: 'position',
       header: 'Position',
       type: 'status',
       sortable: true,
-      width: '160px',
+      width: '150px',
       options: [
         { label: 'USER', value: 'USER', color: 'green' },
-        { label: 'Backend unavailable', value: 'Backend unavailable', color: 'red' },
+        { label: 'ADMIN', value: 'ADMIN', color: 'blue' },
+        { label: 'MANAGER', value: 'MANAGER', color: 'gold' },
+        { label: 'DEVELOPER', value: 'DEVELOPER', color: 'purple' },
+      ],
+      filters: [
+        { text: 'USER', value: 'USER' },
+        { text: 'ADMIN', value: 'ADMIN' },
+        { text: 'MANAGER', value: 'MANAGER' },
+        { text: 'DEVELOPER', value: 'DEVELOPER' },
       ],
     },
     { key: 'roles', header: 'Roles', type: 'array', width: '220px' },
+    {
+      key: 'actions',
+      header: 'Actions',
+      type: 'action',
+      actions: this.rowActions,
+      width: '240px',
+      align: 'center',
+    },
   ];
 
-  protected readonly filteredRows = computed(() => {
-    const term = this.normalizeTerm(this.tableSearchTerm());
-    const rows = this.tableData();
-
-    if (!term) {
-      return rows;
-    }
-
-    return rows.filter((row) => this.matchesSearch(row, term));
-  });
-
-  protected readonly currentRow = computed(() => this.selectedUser() ?? this.userProfile());
-
-  protected readonly tableConfig = computed<SsTableConfig<UserInfo>>(() => ({
+  protected readonly tableConfig = computed<SsTableConfig<UserRow>>(() => ({
     bordered: true,
     size: 'middle',
     loading: this.loading(),
-    pageIndex: this.currentPageIndex(),
-    pageSize: this.currentPageSize(),
+    loadingType: 'spinner',
     lazy: false,
-    selectionMode: 'single',
+    pageIndex: this.pageIndex(),
+    pageSize: this.pageSize(),
+    selectionMode: 'multiple',
     showCheckbox: true,
     showIndexColumn: true,
     showSearch: true,
-    showFilter: false,
+    showFilter: true,
     showPaginator: true,
-    rowsPerPageOptions: [5, 10, 20],
-    searchPlaceholder: 'Search username, name, position, or role',
-    hideOnSinglePage: true,
-    showQuickJumper: false,
-    scrollable: false,
+    rowsPerPageOptions: [5, 10, 20, 50],
+    searchPlaceholder: 'Tìm theo username, tên, email, role...',
+    showQuickJumper: true,
+    scrollable: true,
+    scrollX: 'max-content',
+    scroll: { x: 'max-content' },
     tableLayout: 'fixed',
     paginationPosition: 'bottom',
     searchTerm: this.tableSearchTerm(),
-    selectedRows: this.selectedUser() ? [this.selectedUser()!] : [],
-    rowKey: (row) => row.username || row.fullName,
-    emptyTitle: 'No matching users',
-    emptyMessage: 'Try a different search term or reload the profile data.',
+    selectedRows: this.selectedRows(),
+    rowKey: 'username',
+    emptyTitle: 'Không có dữ liệu',
+    emptyMessage: 'Thử thay đổi bộ lọc hoặc tải lại danh sách.',
     sortMode: 'multiple',
   }));
 
-  protected readonly tableSummary = computed(() => {
-    const total = this.tableData().length;
-    const visible = this.filteredRows().length;
-    return {
-      total,
-      visible,
-      searchActive: !!this.tableSearchTerm().trim(),
-    };
-  });
+  protected readonly tableSummary = computed(() => ({
+    total: this.total(),
+    visible: this.rows().length,
+    selected: this.selectedRows().length,
+  }));
 
-  protected readonly displayName = computed(() => {
-    const current = this.currentRow();
-    return current?.fullName || this.keycloakService.getFullName() || 'User';
-  });
-
-  protected readonly displayUsername = computed(() => {
-    const current = this.currentRow();
-    return current?.username || this.keycloakService.getUsername() || 'unknown';
-  });
-
-  protected readonly displayRoles = computed(() => {
-    const current = this.currentRow();
-    return current?.roles?.length ? current.roles.join(', ') : 'No roles';
-  });
-
-  protected readonly userInitial = computed(() => this.displayName().charAt(0).toUpperCase() || 'U');
-
+  protected readonly currentUserName = computed(
+    () => this.currentUser()?.fullName || this.keycloakService.getFullName() || 'User',
+  );
+  protected readonly currentUserMeta = computed(
+    () => this.currentUser()?.username || this.keycloakService.getUsername() || 'unknown',
+  );
+  protected readonly currentUserRole = computed(() =>
+    this.currentUser()?.roles?.length ? this.currentUser()!.roles.join(', ') : 'No roles',
+  );
+  protected readonly userInitial = computed(
+    () => this.currentUserName().charAt(0).toUpperCase() || 'U',
+  );
   ngOnInit(): void {
-    this.isLoggedIn.set(this.keycloakService.isLoggedIn());
-
-    if (this.isLoggedIn()) {
-      this.fetchUserProfile();
+    if (!this.keycloakService.isLoggedIn()) {
+      this.keycloakService.login();
+      return;
     }
+    this.fetchUsers();
   }
 
-  fetchUserProfile(): void {
+  fetchUsers(): void {
     this.loading.set(true);
     this.error.set(null);
 
-    this.http.get<UserInfo>(`${environment.apiUrl}/users/me`).subscribe({
-      next: (data) => {
-        this.applyProfileData(data);
+    void firstValueFrom(this.http.get<UserRow[]>(`${environment.apiUrl}/users`))
+      .then((users) => {
+        const rows = users ?? [];
+        this.pageIndex.set(1);
+        this.rows.set(rows);
+        this.total.set(rows.length);
+        this.selectedRows.set([]);
+        this.currentUser.set(null);
         this.loading.set(false);
-      },
-      error: (err) => {
-        console.error('Cannot load user profile from backend:', err);
-
-        const fallback: UserInfo = {
-          ...this.keycloakService.getCurrentUser(),
-          position: 'Backend unavailable',
-          roles: [],
-        };
-
-        this.applyProfileData(fallback);
-        this.error.set(
-          'Cannot load position from backend. Check Spring Boot, database, and Keycloak JWT config.',
-        );
+      })
+      .catch((err) => {
+        console.error('Cannot load users:', err);
+        this.rows.set([]);
+        this.total.set(0);
+        this.selectedRows.set([]);
+        this.currentUser.set(null);
+        this.error.set('Không thể tải danh sách người dùng từ backend.');
         this.loading.set(false);
-      },
-    });
+      });
   }
 
-  login(): void {
-    this.keycloakService.login();
+  logout(): void {
+    void this.keycloakService.logout();
   }
 
-  async logout(): Promise<void> {
-    await this.keycloakService.logout();
-    this.isLoggedIn.set(false);
-    this.userProfile.set(null);
-    this.tableData.set([]);
-    this.selectedUser.set(null);
-    this.tableSearchTerm.set('');
-    this.error.set(null);
-    this.currentPageIndex.set(1);
-    this.currentPageSize.set(5);
+  onTableSelectionChange(event: SsTableSelectionChangeEvent<UserRow>): void {
+    this.selectedRows.set(event.selectedRows ?? []);
   }
 
-  onTableSearchChange(event: SsTableSearchChangeEvent): void {
-    this.tableSearchTerm.set(event.term);
-  }
-
-  onTableSelectionChange(event: SsTableSelectionChangeEvent<UserInfo>): void {
-    this.selectedUser.set(event.selectedRows[0] ?? null);
-  }
-
-  onTableRowClick(event: SsTableRowEvent<UserInfo>): void {
-    this.selectedUser.set(event.row);
+  onTableRowClick(event: SsTableRowEvent<UserRow>): void {
+    this.currentUser.set(event.row);
   }
 
   onTablePageChange(event: SsTablePageChangeEvent): void {
-    this.currentPageIndex.set(event.pageIndex);
-    this.currentPageSize.set(event.pageSize);
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
   }
 
-  private applyProfileData(user: UserInfo): void {
-    this.userProfile.set(user);
-    this.tableData.set([user]);
-    this.selectedUser.set(user);
+  onTableSortChange(event: SsTableSortChangeEvent): void {
+    const active = event.activeKey
+      ? { key: event.activeKey, value: event.activeOrder ?? null }
+      : (event.sort.find((item) => item.value) ?? null);
+
+    if (!active) {
+      return;
+    }
+
+    this.pageIndex.set(1);
   }
 
-  private matchesSearch(user: UserInfo, term: string): boolean {
-    const fields = [
-      user.username,
-      user.fullName,
-      user.position,
-      ...(user.roles ?? []),
-    ];
-
-    return fields.some((field) => this.normalizeTerm(field).includes(term));
+  onTableFilterChange(event: SsTableFilterChangeEvent): void {
+    const active = event.filters.find(
+      (item) => item.key === 'position' && Array.isArray(item.value) && item.value.length > 0,
+    );
+    const value = active?.value?.[0];
+    void value;
+    this.pageIndex.set(1);
   }
 
-  private normalizeTerm(value: string | undefined | null): string {
-    return (value ?? '').trim().toLowerCase();
+  onTableSearchChange(event: SsTableSearchChangeEvent): void {
+    this.tableSearchTerm.set(event.term ?? '');
+    this.pageIndex.set(1);
+  }
+
+  createUser(): void {
+    this.openEditor('create');
+  }
+
+  openDetail(row: UserRow): void {
+    this.currentUser.set(row);
+    this.editorMode.set('detail');
+    this.editorOriginalUsername.set(row.username);
+    this.editorDraft.set({
+      username: row.username,
+      fullName: row.fullName,
+      email: row.email,
+      position: row.position,
+      roles: row.roles.join(', '),
+    });
+    this.editorVisible.set(true);
+  }
+
+  openEdit(row: UserRow): void {
+    this.currentUser.set(row);
+    this.openEditor('edit', row);
+  }
+
+  saveEditor(): void {
+    const draft = this.editorDraft();
+    const payload = {
+      username: draft.username.trim(),
+      fullName: draft.fullName.trim(),
+      email: draft.email.trim(),
+      position: draft.position.trim(),
+      roles: draft.roles
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    };
+
+    this.editorLoading.set(true);
+
+    const request =
+      this.editorMode() === 'edit'
+        ? this.http.put(
+            `${environment.apiUrl}/users/${encodeURIComponent(this.editorOriginalUsername())}`,
+            payload,
+          )
+        : this.http.post(`${environment.apiUrl}/users`, payload);
+
+    void firstValueFrom(request)
+      .then(() => {
+        this.editorLoading.set(false);
+        this.editorVisible.set(false);
+        this.fetchUsers();
+      })
+      .catch((err) => {
+        console.error('Save user failed:', err);
+        this.editorLoading.set(false);
+        this.error.set(this.editorMode() === 'edit' ? 'Sửa user thất bại.' : 'Tạo user thất bại.');
+      });
+  }
+
+  closeEditor(): void {
+    this.editorVisible.set(false);
+    this.editorLoading.set(false);
+  }
+
+  updateDraftField<K extends keyof UserDraft>(key: K, value: UserDraft[K]): void {
+    this.editorDraft.update((draft) => ({
+      ...draft,
+      [key]: value,
+    }));
+  }
+
+  deleteRow(row: UserRow): void {
+    if (!window.confirm(`Xóa user ${row.username}?`)) {
+      return;
+    }
+
+    void firstValueFrom(
+      this.http.delete<void>(`${environment.apiUrl}/users/${encodeURIComponent(row.username)}`),
+    )
+      .then(() => this.fetchUsers())
+      .catch((err) => {
+        console.error('Delete user failed:', err);
+        this.error.set('Xóa user thất bại.');
+      });
+  }
+
+  deleteSelected(): void {
+    const rows = this.selectedRows();
+    if (!rows.length) {
+      return;
+    }
+
+    if (!window.confirm(`Xóa ${rows.length} user đã chọn?`)) {
+      return;
+    }
+
+    void Promise.all(
+      rows.map((row) =>
+        firstValueFrom(
+          this.http.delete<void>(`${environment.apiUrl}/users/${encodeURIComponent(row.username)}`),
+        ),
+      ),
+    )
+      .then(() => {
+        this.selectedRows.set([]);
+        this.fetchUsers();
+      })
+      .catch((err) => {
+        console.error('Delete selected failed:', err);
+        this.error.set('Xóa các user đã chọn thất bại.');
+      });
+  }
+
+  trackByUsername(_: number, row: UserRow): string {
+    return row.username;
+  }
+
+  private openEditor(mode: 'create' | 'edit' | 'detail', row?: UserRow): void {
+    this.editorMode.set(mode);
+    this.editorOriginalUsername.set(row?.username ?? '');
+    this.editorDraft.set({
+      username: row?.username ?? '',
+      fullName: row?.fullName ?? '',
+      email: row?.email ?? '',
+      position: row?.position ?? 'USER',
+      roles: row?.roles?.join(', ') ?? '',
+    });
+    this.editorVisible.set(true);
   }
 }
