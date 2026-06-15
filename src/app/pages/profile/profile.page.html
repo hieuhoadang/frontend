@@ -93,7 +93,8 @@
     <ss-table
       [tableConfig]="tableConfig()"
       [columns]="tableColumns"
-      [data]="rows()"
+      [data]="[]"
+      [pageData]="rows()"
       (selectionChange)="onTableSelectionChange($event)"
       (rowClick)="onTableRowClick($event)"
       (pageChange)="onTablePageChange($event)"

@@ -6,6 +6,7 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzModalModule } from 'ng-zorro-antd/modal';
+import { HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import {
   SsTableComponent,
@@ -17,6 +18,7 @@ import {
   SsTableSelectionChangeEvent,
   SsTableSearchChangeEvent,
   SsTableSortChangeEvent,
+  SsTableSortOrder,
 } from '@platform/ui-kit';
 import { environment } from '../../../environments/environment';
 import { KeycloakService } from '../../core/auth/keycloak.service';
@@ -27,6 +29,11 @@ interface UserRow {
   email: string;
   position: string;
   roles: string[];
+}
+
+interface UserPageResponse {
+  content: UserRow[];
+  total: number;
 }
 
 interface UserDraft {
@@ -65,6 +72,9 @@ export class ProfilePage implements OnInit {
   protected readonly tableSearchTerm = signal('');
   protected readonly pageIndex = signal(1);
   protected readonly pageSize = signal(5);
+  protected readonly sortBy = signal('username');
+  protected readonly sortOrder = signal<SsTableSortOrder>('ascend');
+  protected readonly positionFilter = signal('');
   protected readonly editorVisible = signal(false);
   protected readonly editorMode = signal<'create' | 'edit' | 'detail'>('detail');
   protected readonly editorLoading = signal(false);
@@ -138,9 +148,10 @@ export class ProfilePage implements OnInit {
     size: 'middle',
     loading: this.loading(),
     loadingType: 'spinner',
-    lazy: false,
+    lazy: true,
     pageIndex: this.pageIndex(),
     pageSize: this.pageSize(),
+    total: this.total(),
     selectionMode: 'multiple',
     showCheckbox: true,
     showIndexColumn: true,
@@ -193,14 +204,14 @@ export class ProfilePage implements OnInit {
     this.loading.set(true);
     this.error.set(null);
 
-    void firstValueFrom(this.http.get<UserRow[]>(`${environment.apiUrl}/users`))
-      .then((users) => {
-        const rows = users ?? [];
-        this.pageIndex.set(1);
+    void firstValueFrom(
+      this.http.get<UserPageResponse>(`${environment.apiUrl}/users/page`, { params: this.buildQuery() }),
+    )
+      .then((page) => {
+        const rows = page.content ?? [];
         this.rows.set(rows);
-        this.total.set(rows.length);
+        this.total.set(page.total ?? 0);
         this.selectedRows.set([]);
-        this.currentUser.set(null);
         this.loading.set(false);
       })
       .catch((err) => {
@@ -229,6 +240,7 @@ export class ProfilePage implements OnInit {
   onTablePageChange(event: SsTablePageChangeEvent): void {
     this.pageIndex.set(event.pageIndex);
     this.pageSize.set(event.pageSize);
+    this.fetchUsers();
   }
 
   onTableSortChange(event: SsTableSortChangeEvent): void {
@@ -240,7 +252,10 @@ export class ProfilePage implements OnInit {
       return;
     }
 
+    this.sortBy.set(active.key);
+    this.sortOrder.set(active.value ?? null);
     this.pageIndex.set(1);
+    this.fetchUsers();
   }
 
   onTableFilterChange(event: SsTableFilterChangeEvent): void {
@@ -248,13 +263,15 @@ export class ProfilePage implements OnInit {
       (item) => item.key === 'position' && Array.isArray(item.value) && item.value.length > 0,
     );
     const value = active?.value?.[0];
-    void value;
+    this.positionFilter.set(value == null ? '' : String(value));
     this.pageIndex.set(1);
+    this.fetchUsers();
   }
 
   onTableSearchChange(event: SsTableSearchChangeEvent): void {
     this.tableSearchTerm.set(event.term ?? '');
     this.pageIndex.set(1);
+    this.fetchUsers();
   }
 
   createUser(): void {
@@ -372,6 +389,21 @@ export class ProfilePage implements OnInit {
 
   trackByUsername(_: number, row: UserRow): string {
     return row.username;
+  }
+
+  private buildQuery(): HttpParams {
+    let params = new HttpParams()
+      .set('search', this.tableSearchTerm())
+      .set('sortBy', this.sortBy())
+      .set('sortOrder', this.sortOrder() ?? '')
+      .set('pageIndex', String(this.pageIndex()))
+      .set('pageSize', String(this.pageSize()));
+
+    if (this.positionFilter()) {
+      params = params.set('position', this.positionFilter());
+    }
+
+    return params;
   }
 
   private openEditor(mode: 'create' | 'edit' | 'detail', row?: UserRow): void {
