@@ -62,6 +62,9 @@ interface UserDraft {
 export class ProfilePage implements OnInit {
   private readonly http = inject(HttpClient);
   protected readonly keycloakService = inject(KeycloakService);
+  private lastFetchedQueryKey = '';
+  private inFlightQueryKey = '';
+  private latestRequestId = 0;
 
   protected readonly loading = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -109,39 +112,65 @@ export class ProfilePage implements OnInit {
     },
   ];
 
-  protected readonly tableColumns: SsTableColumnConfig<UserRow>[] = [
-    { key: 'username', header: 'Username', sortable: true, width: '180px' },
-    { key: 'fullName', header: 'Full name', sortable: true, width: '220px' },
-    { key: 'email', header: 'Email', type: 'email', sortable: true, width: '240px' },
-    {
-      key: 'position',
-      header: 'Position',
-      type: 'status',
-      sortable: true,
-      width: '150px',
-      options: [
-        { label: 'USER', value: 'USER', color: 'green' },
-        { label: 'ADMIN', value: 'ADMIN', color: 'blue' },
-        { label: 'MANAGER', value: 'MANAGER', color: 'gold' },
-        { label: 'DEVELOPER', value: 'DEVELOPER', color: 'purple' },
-      ],
-      filters: [
-        { text: 'USER', value: 'USER' },
-        { text: 'ADMIN', value: 'ADMIN' },
-        { text: 'MANAGER', value: 'MANAGER' },
-        { text: 'DEVELOPER', value: 'DEVELOPER' },
-      ],
-    },
-    { key: 'roles', header: 'Roles', type: 'array', width: '220px' },
-    {
-      key: 'actions',
-      header: 'Actions',
-      type: 'action',
-      actions: this.rowActions,
-      width: '240px',
-      align: 'center',
-    },
-  ];
+  protected readonly tableColumns = computed<SsTableColumnConfig<UserRow>[]>(() => {
+    const activeSortBy = this.sortBy();
+    const activeSortOrder = this.sortOrder();
+    const activePositionFilter = this.positionFilter();
+
+    return [
+      {
+        key: 'username',
+        header: 'Username',
+        sortable: true,
+        width: '180px',
+        sortOrder: activeSortBy === 'username' ? activeSortOrder : null,
+      },
+      {
+        key: 'fullName',
+        header: 'Full name',
+        sortable: true,
+        width: '220px',
+        sortOrder: activeSortBy === 'fullName' ? activeSortOrder : null,
+      },
+      {
+        key: 'email',
+        header: 'Email',
+        type: 'email',
+        sortable: true,
+        width: '240px',
+        sortOrder: activeSortBy === 'email' ? activeSortOrder : null,
+      },
+      {
+        key: 'position',
+        header: 'Position',
+        type: 'status',
+        sortable: true,
+        width: '150px',
+        sortOrder: activeSortBy === 'position' ? activeSortOrder : null,
+        options: [
+          { label: 'USER', value: 'USER', color: 'green' },
+          { label: 'ADMIN', value: 'ADMIN', color: 'blue' },
+          { label: 'MANAGER', value: 'MANAGER', color: 'gold' },
+          { label: 'DEVELOPER', value: 'DEVELOPER', color: 'purple' },
+        ],
+        filters: [
+          { text: 'USER', value: 'USER', byDefault: activePositionFilter === 'USER' },
+          { text: 'ADMIN', value: 'ADMIN', byDefault: activePositionFilter === 'ADMIN' },
+          { text: 'MANAGER', value: 'MANAGER', byDefault: activePositionFilter === 'MANAGER' },
+          { text: 'DEVELOPER', value: 'DEVELOPER', byDefault: activePositionFilter === 'DEVELOPER' },
+        ],
+      },
+      { key: 'roles', header: 'Roles', type: 'array', width: '220px' },
+      {
+        key: 'actions',
+        header: 'Actions',
+        type: 'action',
+        actions: this.rowActions,
+        width: '240px',
+        align: 'center',
+      },
+    ];
+  });
 
   protected readonly tableConfig = computed<SsTableConfig<UserRow>>(() => ({
     bordered: true,
@@ -197,17 +226,38 @@ export class ProfilePage implements OnInit {
       this.keycloakService.login();
       return;
     }
-    this.fetchUsers();
+    this.fetchUsers(true);
   }
 
-  fetchUsers(): void {
+  fetchUsers(force = false, nextPageState?: { pageIndex?: number; pageSize?: number }): void {
+    const queryKey = this.buildQueryKey(nextPageState);
+    if (!force && (queryKey === this.inFlightQueryKey || queryKey === this.lastFetchedQueryKey)) {
+      return;
+    }
+
+    if (nextPageState?.pageIndex != null && this.pageIndex() !== nextPageState.pageIndex) {
+      this.pageIndex.set(nextPageState.pageIndex);
+    }
+    if (nextPageState?.pageSize != null && this.pageSize() !== nextPageState.pageSize) {
+      this.pageSize.set(nextPageState.pageSize);
+    }
+
+    const requestId = ++this.latestRequestId;
+    this.inFlightQueryKey = queryKey;
     this.loading.set(true);
     this.error.set(null);
 
     void firstValueFrom(
-      this.http.get<UserPageResponse>(`${environment.apiUrl}/users/page`, { params: this.buildQuery() }),
+      this.http.get<UserPageResponse>(`${environment.apiUrl}/users/page`, {
+        params: this.buildQuery(nextPageState),
+      }),
     )
       .then((page) => {
+        if (requestId !== this.latestRequestId) {
+          return;
+        }
+        this.lastFetchedQueryKey = queryKey;
+        this.inFlightQueryKey = '';
         const rows = page.content ?? [];
         this.rows.set(rows);
         this.total.set(page.total ?? 0);
@@ -215,6 +265,10 @@ export class ProfilePage implements OnInit {
         this.loading.set(false);
       })
       .catch((err) => {
+        if (requestId !== this.latestRequestId) {
+          return;
+        }
+        this.inFlightQueryKey = '';
         console.error('Cannot load users:', err);
         this.rows.set([]);
         this.total.set(0);
@@ -238,9 +292,7 @@ export class ProfilePage implements OnInit {
   }
 
   onTablePageChange(event: SsTablePageChangeEvent): void {
-    this.pageIndex.set(event.pageIndex);
-    this.pageSize.set(event.pageSize);
-    this.fetchUsers();
+    this.fetchUsers(false, { pageIndex: event.pageIndex, pageSize: event.pageSize });
   }
 
   onTableSortChange(event: SsTableSortChangeEvent): void {
@@ -252,10 +304,13 @@ export class ProfilePage implements OnInit {
       return;
     }
 
+    if (this.sortBy() === active.key && this.sortOrder() === (active.value ?? null)) {
+      return;
+    }
+
     this.sortBy.set(active.key);
     this.sortOrder.set(active.value ?? null);
-    this.pageIndex.set(1);
-    this.fetchUsers();
+    this.fetchUsers(false, { pageIndex: 1, pageSize: this.pageSize() });
   }
 
   onTableFilterChange(event: SsTableFilterChangeEvent): void {
@@ -263,15 +318,21 @@ export class ProfilePage implements OnInit {
       (item) => item.key === 'position' && Array.isArray(item.value) && item.value.length > 0,
     );
     const value = active?.value?.[0];
-    this.positionFilter.set(value == null ? '' : String(value));
-    this.pageIndex.set(1);
-    this.fetchUsers();
+    const nextPositionFilter = value == null ? '' : String(value);
+    if (this.positionFilter() === nextPositionFilter) {
+      return;
+    }
+    this.positionFilter.set(nextPositionFilter);
+    this.fetchUsers(false, { pageIndex: 1, pageSize: this.pageSize() });
   }
 
   onTableSearchChange(event: SsTableSearchChangeEvent): void {
-    this.tableSearchTerm.set(event.term ?? '');
-    this.pageIndex.set(1);
-    this.fetchUsers();
+    const nextSearchTerm = event.term ?? '';
+    if (this.tableSearchTerm() === nextSearchTerm) {
+      return;
+    }
+    this.tableSearchTerm.set(nextSearchTerm);
+    this.fetchUsers(false, { pageIndex: 1, pageSize: this.pageSize() });
   }
 
   createUser(): void {
@@ -324,7 +385,13 @@ export class ProfilePage implements OnInit {
       .then(() => {
         this.editorLoading.set(false);
         this.editorVisible.set(false);
-        this.fetchUsers();
+        if (this.editorMode() === 'create') {
+          this.sortBy.set('id');
+          this.sortOrder.set('descend');
+          this.fetchUsers(true, { pageIndex: 1, pageSize: this.pageSize() });
+          return;
+        }
+        this.fetchUsers(true, { pageIndex: this.pageIndex(), pageSize: this.pageSize() });
       })
       .catch((err) => {
         console.error('Save user failed:', err);
@@ -353,7 +420,7 @@ export class ProfilePage implements OnInit {
     void firstValueFrom(
       this.http.delete<void>(`${environment.apiUrl}/users/${encodeURIComponent(row.username)}`),
     )
-      .then(() => this.fetchUsers())
+      .then(() => this.fetchUsers(true, { pageIndex: this.pageIndex(), pageSize: this.pageSize() }))
       .catch((err) => {
         console.error('Delete user failed:', err);
         this.error.set('Xóa user thất bại.');
@@ -379,7 +446,7 @@ export class ProfilePage implements OnInit {
     )
       .then(() => {
         this.selectedRows.set([]);
-        this.fetchUsers();
+        this.fetchUsers(true, { pageIndex: this.pageIndex(), pageSize: this.pageSize() });
       })
       .catch((err) => {
         console.error('Delete selected failed:', err);
@@ -391,19 +458,34 @@ export class ProfilePage implements OnInit {
     return row.username;
   }
 
-  private buildQuery(): HttpParams {
+  private buildQuery(nextPageState?: { pageIndex?: number; pageSize?: number }): HttpParams {
+    const pageIndex = nextPageState?.pageIndex ?? this.pageIndex();
+    const pageSize = nextPageState?.pageSize ?? this.pageSize();
     let params = new HttpParams()
       .set('search', this.tableSearchTerm())
       .set('sortBy', this.sortBy())
       .set('sortOrder', this.sortOrder() ?? '')
-      .set('pageIndex', String(this.pageIndex()))
-      .set('pageSize', String(this.pageSize()));
+      .set('pageIndex', String(pageIndex))
+      .set('pageSize', String(pageSize));
 
     if (this.positionFilter()) {
       params = params.set('position', this.positionFilter());
     }
 
     return params;
+  }
+
+  private buildQueryKey(nextPageState?: { pageIndex?: number; pageSize?: number }): string {
+    const pageIndex = nextPageState?.pageIndex ?? this.pageIndex();
+    const pageSize = nextPageState?.pageSize ?? this.pageSize();
+    return [
+      `search=${this.tableSearchTerm()}`,
+      `sortBy=${this.sortBy()}`,
+      `sortOrder=${this.sortOrder() ?? ''}`,
+      `pageIndex=${pageIndex}`,
+      `pageSize=${pageSize}`,
+      `position=${this.positionFilter()}`,
+    ].join('&');
   }
 
   private openEditor(mode: 'create' | 'edit' | 'detail', row?: UserRow): void {
