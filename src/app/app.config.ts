@@ -2,7 +2,30 @@ import { APP_INITIALIZER, ApplicationConfig } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import { provideRouter } from '@angular/router';
+import { provideNzIcons } from 'ng-zorro-antd/icon';
 import { provideNzI18n, vi_VN } from 'ng-zorro-antd/i18n';
+import {
+  CloseOutline,
+  DeleteOutline,
+  DoubleLeftOutline,
+  DoubleRightOutline,
+  DownOutline,
+  EditOutline,
+  EyeOutline,
+  FilterOutline,
+  LeftOutline,
+  LogoutOutline,
+  MenuOutline,
+  MoreOutline,
+  PlusOutline,
+  ReloadOutline,
+  RightOutline,
+  SearchOutline,
+  SettingOutline,
+  SwapOutline,
+  UndoOutline,
+  WarningOutline,
+} from '@ant-design/icons-angular/icons';
 import { routes } from './app.routes';
 import { KeycloakService } from './core/auth/keycloak.service';
 import { authInterceptor } from './core/http/auth.interceptor';
@@ -16,6 +39,28 @@ export const appConfig: ApplicationConfig = {
     provideAnimations(),
     provideRouter(routes),
     provideNzI18n(vi_VN),
+    provideNzIcons([
+      CloseOutline,
+      DeleteOutline,
+      DoubleLeftOutline,
+      DoubleRightOutline,
+      DownOutline,
+      EditOutline,
+      EyeOutline,
+      FilterOutline,
+      LeftOutline,
+      LogoutOutline,
+      MenuOutline,
+      MoreOutline,
+      PlusOutline,
+      ReloadOutline,
+      RightOutline,
+      SearchOutline,
+      SettingOutline,
+      SwapOutline,
+      UndoOutline,
+      WarningOutline,
+    ]),
     provideHttpClient(withInterceptors([authInterceptor])),
     {
       provide: APP_INITIALIZER,

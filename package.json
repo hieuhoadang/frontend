@@ -18,7 +18,7 @@
     "@angular/forms": "^19.2.0",
     "@angular/platform-browser": "^19.2.0",
     "@angular/router": "^19.2.0",
-    "@platform/ui-kit": "file:../mfe-platform-libs/dist/platform/ui-kit/platform-ui-kit-0.0.1.tgz",
+    "@platform/ui-kit": "file:../mfe-platform-libs/dist/platform/ui-kit/platform-ui-kit-0.0.9.tgz",
     "ng-zorro-antd": "^19.3.1",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"

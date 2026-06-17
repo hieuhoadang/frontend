@@ -6,6 +6,7 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { NzInputModule } from 'ng-zorro-antd/input';
 import { NzModalModule } from 'ng-zorro-antd/modal';
+import { NzSelectModule } from 'ng-zorro-antd/select';
 import { HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import {
@@ -44,6 +45,48 @@ interface UserDraft {
   roles: string;
 }
 
+interface ProfileTableToolbarActionEvent {
+  type: 'filter' | 'sort' | 'settings' | 'primary' | 'searchClear' | 'reload';
+}
+
+interface ProfileVisibleColumnsChangeEvent {
+  visibleColumnKeys: string[];
+  hiddenColumnKeys: string[];
+}
+
+interface ProfilePrimaryActionOptionsChangeEvent {
+  activeKey: string | null;
+  options: Array<{
+    key: string;
+    label: string;
+    icon?: string;
+    type?: 'primary' | 'default' | 'dashed' | 'link' | 'text';
+    danger?: boolean;
+    disabled?: boolean;
+    selected?: boolean;
+    visible?: boolean;
+  }>;
+  activeAction: {
+    key?: string;
+    label: string;
+    icon?: string;
+    type?: 'primary' | 'default' | 'dashed' | 'link' | 'text';
+    danger?: boolean;
+    disabled?: boolean;
+  } | null;
+}
+
+interface ProfileActionColumnOptionsChangeEvent {
+  enabledKeys: string[];
+  disabledKeys: string[];
+  options: Array<{
+    key: string;
+    label: string;
+    checked?: boolean;
+    disabled?: boolean;
+  }>;
+}
+
 @Component({
   selector: 'app-profile-page',
   standalone: true,
@@ -54,6 +97,7 @@ interface UserDraft {
     NzIconModule,
     NzInputModule,
     NzModalModule,
+    NzSelectModule,
     SsTableComponent,
   ],
   templateUrl: './profile.page.html',
@@ -78,6 +122,9 @@ export class ProfilePage implements OnInit {
   protected readonly sortBy = signal('username');
   protected readonly sortOrder = signal<SsTableSortOrder>('ascend');
   protected readonly positionFilter = signal('');
+  protected readonly positionOptions = ['USER', 'ADMIN', 'MANAGER', 'DEVELOPER'];
+  protected readonly activePrimaryActionKey = signal('create');
+  protected readonly enabledActionColumnKeys = signal<string[]>(['detail', 'edit', 'delete']);
   protected readonly editorVisible = signal(false);
   protected readonly editorMode = signal<'create' | 'edit' | 'detail'>('detail');
   protected readonly editorLoading = signal(false);
@@ -92,18 +139,21 @@ export class ProfilePage implements OnInit {
 
   protected readonly rowActions = [
     {
+      key: 'detail',
       label: 'Chi tiết',
       icon: 'eye',
       type: 'link' as const,
       onClick: (row: UserRow) => this.openDetail(row),
     },
     {
+      key: 'edit',
       label: 'Sửa',
       icon: 'edit',
       type: 'default' as const,
       onClick: (row: UserRow) => this.openEdit(row),
     },
     {
+      key: 'delete',
       label: 'Xóa',
       icon: 'delete',
       type: 'default' as const,
@@ -171,8 +221,9 @@ export class ProfilePage implements OnInit {
       },
     ];
   });
-
   protected readonly tableConfig = computed<SsTableConfig<UserRow>>(() => ({
+    title: 'Users table',
+    description: 'Quản lý danh sách người dùng với phân trang từ backend.',
     bordered: true,
     size: 'middle',
     loading: this.loading(),
@@ -186,9 +237,17 @@ export class ProfilePage implements OnInit {
     showIndexColumn: true,
     showSearch: true,
     showFilter: true,
+    showSort: true,
+    showSettings: true,
+    showPrimaryAction: true,
+    showActionColumn: true,
+    showPaginationQuickActions: true,
     showPaginator: true,
+    enableColumnResize: true,
     rowsPerPageOptions: [5, 10, 20, 50],
-    searchPlaceholder: 'Tìm theo username, tên, email, role...',
+    searchPlaceholder: 'Search .....',
+    searchMode: 'server',
+    showSearchClear: true,
     showQuickJumper: true,
     scrollable: true,
     scrollX: 'max-content',
@@ -201,12 +260,40 @@ export class ProfilePage implements OnInit {
     emptyTitle: 'Không có dữ liệu',
     emptyMessage: 'Thử thay đổi bộ lọc hoặc tải lại danh sách.',
     sortMode: 'multiple',
-  }));
-
-  protected readonly tableSummary = computed(() => ({
-    total: this.total(),
-    visible: this.rows().length,
-    selected: this.selectedRows().length,
+    primaryActionOptions: [
+      {
+        key: 'create',
+        label: 'Thêm',
+        icon: 'plus',
+        type: 'primary',
+        selected: this.activePrimaryActionKey() === 'create',
+      },
+      {
+        key: 'edit',
+        label: 'Sửa',
+        icon: 'edit',
+        type: 'default',
+        selected: this.activePrimaryActionKey() === 'edit',
+      },
+      {
+        key: 'delete',
+        label: 'Xóa',
+        icon: 'delete',
+        type: 'default',
+        danger: true,
+        selected: this.activePrimaryActionKey() === 'delete',
+      },
+    ],
+    actionColumnOptions: [
+      { key: 'detail', label: 'Chi tiết', checked: this.enabledActionColumnKeys().includes('detail') },
+      { key: 'edit', label: 'Sửa', checked: this.enabledActionColumnKeys().includes('edit') },
+      { key: 'delete', label: 'Xóa', checked: this.enabledActionColumnKeys().includes('delete') },
+    ],
+    filterDrawerTitle: 'Bộ lọc nâng cao',
+    sortDrawerTitle: 'Sắp xếp dữ liệu',
+    settingsDrawerTitle: 'Thiết lập bảng',
+    primaryDrawerTitle: 'Thao tác chính',
+    actionColumnDrawerTitle: 'Hiển thị thao tác',
   }));
 
   protected readonly currentUserName = computed(
@@ -221,6 +308,7 @@ export class ProfilePage implements OnInit {
   protected readonly userInitial = computed(
     () => this.currentUserName().charAt(0).toUpperCase() || 'U',
   );
+
   ngOnInit(): void {
     if (!this.keycloakService.isLoggedIn()) {
       this.keycloakService.login();
@@ -333,6 +421,40 @@ export class ProfilePage implements OnInit {
     }
     this.tableSearchTerm.set(nextSearchTerm);
     this.fetchUsers(false, { pageIndex: 1, pageSize: this.pageSize() });
+  }
+
+  onTableToolbarAction(event: ProfileTableToolbarActionEvent): void {
+    if (event.type === 'reload') {
+      this.fetchUsers(true, { pageIndex: this.pageIndex(), pageSize: this.pageSize() });
+    }
+    if (event.type === 'primary') {
+      switch (this.activePrimaryActionKey()) {
+        case 'edit':
+          if (this.currentUser()) {
+            this.openEdit(this.currentUser()!);
+          }
+          break;
+        case 'delete':
+          if (this.currentUser()) {
+            this.deleteRow(this.currentUser()!);
+          }
+          break;
+        default:
+          this.createUser();
+      }
+    }
+  }
+
+  onPrimaryActionOptionsChange(event: ProfilePrimaryActionOptionsChangeEvent): void {
+    this.activePrimaryActionKey.set(event.activeKey ?? 'create');
+  }
+
+  onActionColumnOptionsChange(event: ProfileActionColumnOptionsChangeEvent): void {
+    this.enabledActionColumnKeys.set(event.enabledKeys);
+  }
+
+  onVisibleColumnsChange(_: ProfileVisibleColumnsChangeEvent): void {
+    return;
   }
 
   createUser(): void {
