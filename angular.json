@@ -53,6 +53,11 @@
 							},
 							{
 								"glob": "**/*",
+								"input": "node_modules/@platform/ui-kit/src/assets/ss-table",
+								"output": "assets/ss-table"
+							},
+							{
+								"glob": "**/*",
 								"input": "public",
 								"output": "."
 							}

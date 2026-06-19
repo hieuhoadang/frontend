@@ -10,16 +10,20 @@ import { NzSelectModule } from 'ng-zorro-antd/select';
 import { HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import {
+  SsTableActionColumnOptionsChangeEvent,
   SsTableComponent,
   SsTableColumnConfig,
   SsTableConfig,
   SsTableFilterChangeEvent,
   SsTablePageChangeEvent,
+  SsTablePrimaryActionOptionsChangeEvent,
   SsTableRowEvent,
   SsTableSelectionChangeEvent,
   SsTableSearchChangeEvent,
   SsTableSortChangeEvent,
   SsTableSortOrder,
+  SsTableToolbarActionEvent,
+  SsTableVisibleColumnsChangeEvent,
 } from '@platform/ui-kit';
 import { environment } from '../../../environments/environment';
 import { KeycloakService } from '../../core/auth/keycloak.service';
@@ -45,50 +49,13 @@ interface UserDraft {
   roles: string;
 }
 
-interface ProfileTableToolbarActionEvent {
-  type: 'filter' | 'sort' | 'settings' | 'primary' | 'searchClear' | 'reload';
-}
-
-interface ProfileVisibleColumnsChangeEvent {
-  visibleColumnKeys: string[];
-  hiddenColumnKeys: string[];
-  isSearchVisible: boolean;
-  isSelectionColumnVisible: boolean;
-  isIndexColumnVisible: boolean;
-  isActionColumnVisible: boolean;
-}
-
-interface ProfilePrimaryActionOptionsChangeEvent {
-  activeKey: string | null;
-  options: Array<{
-    key: string;
-    label: string;
-    icon?: string;
-    type?: 'primary' | 'default' | 'dashed' | 'link' | 'text';
-    danger?: boolean;
-    disabled?: boolean;
-    selected?: boolean;
-    visible?: boolean;
-  }>;
-  activeAction: {
-    key?: string;
-    label: string;
-    icon?: string;
-    type?: 'primary' | 'default' | 'dashed' | 'link' | 'text';
-    danger?: boolean;
-    disabled?: boolean;
-  } | null;
-}
-
-interface ProfileActionColumnOptionsChangeEvent {
-  enabledKeys: string[];
-  disabledKeys: string[];
-  options: Array<{
-    key: string;
-    label: string;
-    checked?: boolean;
-    disabled?: boolean;
-  }>;
+interface PrimaryActionFlags {
+  create: boolean;
+  edit: boolean;
+  approve: boolean;
+  import: boolean;
+  export: boolean;
+  delete: boolean;
 }
 
 @Component({
@@ -145,6 +112,14 @@ export class ProfilePage implements OnInit {
     position: 'USER',
     roles: '',
   });
+  protected primaryActionFlags: PrimaryActionFlags = {
+    create: true,
+    edit: true,
+    approve: true,
+    import: true,
+    export: true,
+    delete: true,
+  };
 
   protected readonly rowActions = [
     {
@@ -178,178 +153,8 @@ export class ProfilePage implements OnInit {
     //   onClick: (row: UserRow) => this.approveRow(row),
     // },
   ];
-
-  protected readonly tableColumns = computed<SsTableColumnConfig<UserRow>[]>(() => {
-    const activeSortBy = this.sortBy();
-    const activeSortOrder = this.sortOrder();
-    const activePositionFilter = this.positionFilter();
-    const visibleColumnKeys = new Set(this.visibleColumnKeys());
-
-    const columns: SsTableColumnConfig<UserRow>[] = [
-      {
-        key: 'username',
-        header: 'Username',
-        sortable: true,
-        width: '180px',
-        visible: visibleColumnKeys.has('username'),
-        sortOrder: activeSortBy === 'username' ? activeSortOrder : null,
-      },
-      {
-        key: 'fullName',
-        header: 'Full name',
-        sortable: true,
-        width: '220px',
-        visible: visibleColumnKeys.has('fullName'),
-        sortOrder: activeSortBy === 'fullName' ? activeSortOrder : null,
-      },
-      {
-        key: 'email',
-        header: 'Email',
-        type: 'email',
-        sortable: true,
-        width: '240px',
-        visible: visibleColumnKeys.has('email'),
-        sortOrder: activeSortBy === 'email' ? activeSortOrder : null,
-      },
-      {
-        key: 'position',
-        header: 'Position',
-        type: 'status',
-        sortable: true,
-        width: '150px',
-        visible: visibleColumnKeys.has('position'),
-        sortOrder: activeSortBy === 'position' ? activeSortOrder : null,
-        options: [
-          { label: 'USER', value: 'USER', color: 'green' },
-          { label: 'ADMIN', value: 'ADMIN', color: 'blue' },
-          { label: 'MANAGER', value: 'MANAGER', color: 'gold' },
-          { label: 'DEVELOPER', value: 'DEVELOPER', color: 'purple' },
-        ],
-        filters: [
-          { text: 'USER', value: 'USER', byDefault: activePositionFilter === 'USER' },
-          { text: 'ADMIN', value: 'ADMIN', byDefault: activePositionFilter === 'ADMIN' },
-          { text: 'MANAGER', value: 'MANAGER', byDefault: activePositionFilter === 'MANAGER' },
-          { text: 'DEVELOPER', value: 'DEVELOPER', byDefault: activePositionFilter === 'DEVELOPER' },
-        ],
-      },
-      { key: 'roles', header: 'Roles', type: 'array', width: '220px', visible: visibleColumnKeys.has('roles') },
-      {
-        key: 'actions',
-        header: 'Actions',
-        type: 'action',
-        actions: this.rowActions,
-        width: '40px',
-        align: 'center',
-      },
-    ];
-
-    return columns;
-  });
-  protected readonly tableConfig = computed<SsTableConfig<UserRow>>(() => ({
-    title: 'Users table',
-    bordered: true,
-    size: 'middle',
-    loading: this.loading(),
-    loadingType: 'spinner',
-    lazy: true,
-    pageIndex: this.pageIndex(),
-    pageSize: this.pageSize(),
-    total: this.total(),
-    selectionMode: 'multiple',
-    showCheckbox: this.selectionColumnVisible(),
-    showIndexColumn: this.indexColumnVisible(),
-    showSearch: this.tableSearchVisible(),
-    showFilter: true,
-    showSort: true,
-    showSettings: true,
-    showPrimaryAction: true,
-    showActionColumn: this.actionColumnVisible(),
-    isActionColumnVisible: this.actionColumnVisible(),
-    showPaginationQuickActions: true,
-    showPaginator: true,
-    enableColumnResize: true,
-    rowsPerPageOptions: [5, 10, 20, 50],
-    searchPlaceholder: 'Search ...',
-    searchMode: 'server',
-    showSearchClear: true,
-    scrollable: true,
-    lockBodyHeight: true,
-    tableBodyHeight: '420px',
-    tableLayout: 'fixed',
-    defaultColumnWidth: '160px',
-    selectionColumnWidth: '40px',
-    indexColumnWidth: '48px',
-    actionColumnWidth: '40px',
-    paginationPosition: 'bottom',
-    searchTerm: this.tableSearchTerm(),
-    selectedRows: this.selectedRows(),
-    rowKey: 'username',
-    emptyTitle: 'Không có dữ liệu',
-    emptyMessage: 'Thử thay đổi bộ lọc hoặc tải lại danh sách.',
-    sortMode: 'multiple',
-    primaryActionOptions: [
-      {
-        key: 'create',
-        label: 'Tạo mới',
-        icon: 'plus',
-        type: 'primary',
-        selected: this.activePrimaryActionKey() === 'create',
-      },
-      {
-        key: 'edit',
-        label: 'Sửa',
-        icon: 'edit',
-        type: 'default',
-        selected: this.activePrimaryActionKey() === 'edit',
-      },
-      {
-        key: 'approve',
-        label: 'Phê duyệt',
-        icon: 'check',
-        type: 'default',
-        selected: this.activePrimaryActionKey() === 'approve',
-      },
-      {
-        key: 'import',
-        label: 'Import',
-        icon: 'upload',
-        type: 'default',
-        selected: this.activePrimaryActionKey() === 'import',
-      },
-      {
-        key: 'export',
-        label: 'Export',
-        icon: 'download',
-        type: 'default',
-        selected: this.activePrimaryActionKey() === 'export',
-      },
-      {
-        key: 'delete',
-        label: 'Xóa',
-        icon: 'delete',
-        type: 'default',
-        danger: true,
-        selected: this.activePrimaryActionKey() === 'delete',
-      },
-    ],
-    actionColumnOptions: [
-      {
-        key: 'detail',
-        label: 'Chi tiết',
-        checked: this.enabledActionColumnKeys().includes('detail'),
-      },
-      {
-        key: 'edit',
-        label: 'Sửa',
-        checked: this.enabledActionColumnKeys().includes('edit'),
-      },
-      {
-        key: 'delete',
-        label: 'Xóa',
-        checked: this.enabledActionColumnKeys().includes('delete'),
-      },
-    ],
-  }));
+  protected readonly tableColumns = computed<SsTableColumnConfig<UserRow>[]>(() => this.buildTableColumns());
+  protected readonly tableConfig = computed<SsTableConfig<UserRow>>(() => this.buildTableConfig());
 
   protected readonly currentUserName = computed(
     () => this.currentUser()?.fullName || this.keycloakService.getFullName() || 'User',
@@ -478,7 +283,7 @@ export class ProfilePage implements OnInit {
     this.fetchUsers(false, { pageIndex: 1, pageSize: this.pageSize() });
   }
 
-  onTableToolbarAction(event: ProfileTableToolbarActionEvent): void {
+  onTableToolbarAction(event: SsTableToolbarActionEvent): void {
     if (event.type === 'reload') {
       this.resetTableQueryState();
       this.fetchUsers(true, { pageIndex: 1, pageSize: this.pageSize() });
@@ -514,15 +319,15 @@ export class ProfilePage implements OnInit {
     }
   }
 
-  onPrimaryActionOptionsChange(event: ProfilePrimaryActionOptionsChangeEvent): void {
+  onPrimaryActionOptionsChange(event: SsTablePrimaryActionOptionsChangeEvent): void {
     this.activePrimaryActionKey.set(event.activeKey ?? 'create');
   }
 
-  onActionColumnOptionsChange(event: ProfileActionColumnOptionsChangeEvent): void {
+  onActionColumnOptionsChange(event: SsTableActionColumnOptionsChangeEvent): void {
     this.enabledActionColumnKeys.set(event.enabledKeys);
   }
 
-  onVisibleColumnsChange(event: ProfileVisibleColumnsChangeEvent): void {
+  onVisibleColumnsChange(event: SsTableVisibleColumnsChangeEvent): void {
     this.visibleColumnKeys.set(event.visibleColumnKeys);
     this.tableSearchVisible.set(event.isSearchVisible);
     this.selectionColumnVisible.set(event.isSelectionColumnVisible);
@@ -651,6 +456,141 @@ export class ProfilePage implements OnInit {
 
   trackByUsername(_: number, row: UserRow): string {
     return row.username;
+  }
+
+  private buildTableColumns(): SsTableColumnConfig<UserRow>[] {
+    const activeSortBy = this.sortBy();
+    const activeSortOrder = this.sortOrder();
+    const activePositionFilter = this.positionFilter();
+    const visibleColumnKeys = new Set(this.visibleColumnKeys());
+
+    return [
+      {
+        key: 'username',
+        header: 'Username',
+        sortable: true,
+        width: '180px',
+        visible: visibleColumnKeys.has('username'),
+        sortOrder: activeSortBy === 'username' ? activeSortOrder : null,
+      },
+      {
+        key: 'fullName',
+        header: 'Full name',
+        sortable: true,
+        width: '220px',
+        visible: visibleColumnKeys.has('fullName'),
+        sortOrder: activeSortBy === 'fullName' ? activeSortOrder : null,
+      },
+      {
+        key: 'email',
+        header: 'Email',
+        type: 'email',
+        sortable: true,
+        width: '240px',
+        visible: visibleColumnKeys.has('email'),
+        sortOrder: activeSortBy === 'email' ? activeSortOrder : null,
+      },
+      {
+        key: 'position',
+        header: 'Position',
+        type: 'status',
+        sortable: true,
+        width: '150px',
+        visible: visibleColumnKeys.has('position'),
+        sortOrder: activeSortBy === 'position' ? activeSortOrder : null,
+        options: [
+          { label: 'USER', value: 'USER', color: 'green' },
+          { label: 'ADMIN', value: 'ADMIN', color: 'blue' },
+          { label: 'MANAGER', value: 'MANAGER', color: 'gold' },
+          { label: 'DEVELOPER', value: 'DEVELOPER', color: 'purple' },
+        ],
+        filters: [
+          { text: 'USER', value: 'USER', byDefault: activePositionFilter === 'USER' },
+          { text: 'ADMIN', value: 'ADMIN', byDefault: activePositionFilter === 'ADMIN' },
+          { text: 'MANAGER', value: 'MANAGER', byDefault: activePositionFilter === 'MANAGER' },
+          { text: 'DEVELOPER', value: 'DEVELOPER', byDefault: activePositionFilter === 'DEVELOPER' },
+        ],
+      },
+      { key: 'roles', header: 'Roles', type: 'array', width: '220px', visible: visibleColumnKeys.has('roles') },
+      {
+        key: 'actions',
+        header: 'Actions',
+        type: 'action',
+        actions: this.rowActions,
+        width: '40px',
+        align: 'center',
+      },
+    ];
+  }
+
+  private buildTableConfig(): SsTableConfig<UserRow> {
+    return {
+      title: 'Users table',
+      bordered: true,
+      size: 'middle',
+      loading: this.loading(),
+      loadingType: 'spinner',
+      lazy: true,
+      pageIndex: this.pageIndex(),
+      pageSize: this.pageSize(),
+      total: this.total(),
+      selectionMode: 'multiple',
+      showCheckbox: this.selectionColumnVisible(),
+      showIndexColumn: this.indexColumnVisible(),
+      showSearch: this.tableSearchVisible(),
+      showFilter: true,
+      showSort: true,
+      showSettings: true,
+      showPrimaryAction: true,
+      showActionColumn: this.actionColumnVisible(),
+      isActionColumnVisible: this.actionColumnVisible(),
+      showPaginationQuickActions: true,
+      showPaginator: true,
+      enableColumnResize: true,
+      rowsPerPageOptions: [5, 10, 20, 50],
+      searchPlaceholder: 'Search ...',
+      searchMode: 'server',
+      showSearchClear: true,
+      scrollable: true,
+      lockBodyHeight: true,
+      tableBodyHeight: '420px',
+      tableLayout: 'fixed',
+      defaultColumnWidth: '160px',
+      selectionColumnWidth: '40px',
+      indexColumnWidth: '48px',
+      actionColumnWidth: '40px',
+      searchTerm: this.tableSearchTerm(),
+      selectedRows: this.selectedRows(),
+      rowKey: 'username',
+      emptyTitle: 'Không có dữ liệu',
+      emptyMessage: 'Thử thay đổi bộ lọc hoặc tải lại danh sách.',
+      sortMode: 'multiple',
+      primaryActionOptions: this.buildPrimaryActionOptions(),
+      actionColumnOptions: [
+        { key: 'detail', label: 'Chi tiết', checked: this.enabledActionColumnKeys().includes('detail') },
+        { key: 'edit', label: 'Sửa', checked: this.enabledActionColumnKeys().includes('edit') },
+        { key: 'delete', label: 'Xóa', checked: this.enabledActionColumnKeys().includes('delete') },
+      ],
+    };
+  }
+
+  private buildPrimaryActionOptions() {
+    const activeKey = this.activePrimaryActionKey();
+    const options = [
+      { key: 'create', label: 'Tạo mới', icon: 'plus', type: 'primary' as const, visible: this.primaryActionFlags.create },
+      { key: 'edit', label: 'Sửa', icon: 'edit', type: 'default' as const, visible: this.primaryActionFlags.edit },
+      { key: 'approve', label: 'Phê duyệt', icon: 'check', type: 'default' as const, visible: this.primaryActionFlags.approve },
+      { key: 'import', label: 'Import', icon: 'upload', type: 'default' as const, visible: this.primaryActionFlags.import },
+      { key: 'export', label: 'Export', icon: 'download', type: 'default' as const, visible: this.primaryActionFlags.export },
+      { key: 'delete', label: 'Xóa', icon: 'delete', type: 'default' as const, danger: true, visible: this.primaryActionFlags.delete },
+    ];
+
+    return options
+      .filter((option) => option.visible)
+      .map(({ visible, ...option }) => ({
+        ...option,
+        selected: activeKey === option.key,
+      }));
   }
 
   private buildQuery(nextPageState?: { pageIndex?: number; pageSize?: number }): HttpParams {
