@@ -63,6 +63,31 @@
   background: var(--color-bg-container);
 }
 
+:host ::ng-deep .ss-table-actions-cell .ant-dropdown-trigger,
+:host ::ng-deep .ss-table-actions-header__icon {
+  margin-inline: auto;
+}
+
+:host ::ng-deep .ss-table-actions-cell .ss-table-row-actions,
+:host ::ng-deep .ss-table-actions-header__trigger {
+  max-width: 100%;
+}
+
+:host ::ng-deep .ss-table-overlay-panel .ant-checkbox-wrapper,
+:host ::ng-deep .ss-table-overlay-panel .ant-radio-wrapper {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-inline-start: 0;
+}
+
+:host ::ng-deep .ss-table-overlay-panel .ant-checkbox + span,
+:host ::ng-deep .ss-table-overlay-panel .ant-radio + span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
 /* Editor Overlay */
 .editor-overlay {
   position: fixed;

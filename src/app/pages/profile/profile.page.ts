@@ -52,6 +52,10 @@ interface ProfileTableToolbarActionEvent {
 interface ProfileVisibleColumnsChangeEvent {
   visibleColumnKeys: string[];
   hiddenColumnKeys: string[];
+  isSearchVisible: boolean;
+  isSelectionColumnVisible: boolean;
+  isIndexColumnVisible: boolean;
+  isActionColumnVisible: boolean;
 }
 
 interface ProfilePrimaryActionOptionsChangeEvent {
@@ -118,13 +122,18 @@ export class ProfilePage implements OnInit {
   protected readonly selectedRows = signal<UserRow[]>([]);
   protected readonly tableSearchTerm = signal('');
   protected readonly pageIndex = signal(1);
-  protected readonly pageSize = signal(5);
+  protected readonly pageSize = signal(10);
   protected readonly sortBy = signal('username');
   protected readonly sortOrder = signal<SsTableSortOrder>('ascend');
   protected readonly positionFilter = signal('');
-  protected readonly positionOptions = ['USER', 'ADMIN', 'MANAGER', 'DEVELOPER'];
+  // protected readonly positionOptions = ['USER', 'ADMIN', 'MANAGER', 'DEVELOPER'];
   protected readonly activePrimaryActionKey = signal('create');
   protected readonly enabledActionColumnKeys = signal<string[]>(['detail', 'edit', 'delete']);
+  protected readonly visibleColumnKeys = signal<string[]>(['username', 'fullName', 'email', 'position', 'roles']);
+  protected readonly tableSearchVisible = signal(true);
+  protected readonly selectionColumnVisible = signal(true);
+  protected readonly indexColumnVisible = signal(true);
+  protected readonly actionColumnVisible = signal(true);
   protected readonly editorVisible = signal(false);
   protected readonly editorMode = signal<'create' | 'edit' | 'detail'>('detail');
   protected readonly editorLoading = signal(false);
@@ -157,22 +166,32 @@ export class ProfilePage implements OnInit {
       label: 'Xóa',
       icon: 'delete',
       type: 'default' as const,
+      danger: true,
       onClick: (row: UserRow) => this.deleteRow(row),
       class: 'danger-action',
     },
+    // {
+    //   key: 'approve',
+    //   label: 'Phê duyệt',
+    //   icon: 'check',
+    //   type: 'default' as const,
+    //   onClick: (row: UserRow) => this.approveRow(row),
+    // },
   ];
 
   protected readonly tableColumns = computed<SsTableColumnConfig<UserRow>[]>(() => {
     const activeSortBy = this.sortBy();
     const activeSortOrder = this.sortOrder();
     const activePositionFilter = this.positionFilter();
+    const visibleColumnKeys = new Set(this.visibleColumnKeys());
 
-    return [
+    const columns: SsTableColumnConfig<UserRow>[] = [
       {
         key: 'username',
         header: 'Username',
         sortable: true,
         width: '180px',
+        visible: visibleColumnKeys.has('username'),
         sortOrder: activeSortBy === 'username' ? activeSortOrder : null,
       },
       {
@@ -180,6 +199,7 @@ export class ProfilePage implements OnInit {
         header: 'Full name',
         sortable: true,
         width: '220px',
+        visible: visibleColumnKeys.has('fullName'),
         sortOrder: activeSortBy === 'fullName' ? activeSortOrder : null,
       },
       {
@@ -188,6 +208,7 @@ export class ProfilePage implements OnInit {
         type: 'email',
         sortable: true,
         width: '240px',
+        visible: visibleColumnKeys.has('email'),
         sortOrder: activeSortBy === 'email' ? activeSortOrder : null,
       },
       {
@@ -196,6 +217,7 @@ export class ProfilePage implements OnInit {
         type: 'status',
         sortable: true,
         width: '150px',
+        visible: visibleColumnKeys.has('position'),
         sortOrder: activeSortBy === 'position' ? activeSortOrder : null,
         options: [
           { label: 'USER', value: 'USER', color: 'green' },
@@ -210,20 +232,21 @@ export class ProfilePage implements OnInit {
           { text: 'DEVELOPER', value: 'DEVELOPER', byDefault: activePositionFilter === 'DEVELOPER' },
         ],
       },
-      { key: 'roles', header: 'Roles', type: 'array', width: '220px' },
+      { key: 'roles', header: 'Roles', type: 'array', width: '220px', visible: visibleColumnKeys.has('roles') },
       {
         key: 'actions',
         header: 'Actions',
         type: 'action',
         actions: this.rowActions,
-        width: '240px',
+        width: '40px',
         align: 'center',
       },
     ];
+
+    return columns;
   });
   protected readonly tableConfig = computed<SsTableConfig<UserRow>>(() => ({
     title: 'Users table',
-    description: 'Quản lý danh sách người dùng với phân trang từ backend.',
     bordered: true,
     size: 'middle',
     loading: this.loading(),
@@ -233,26 +256,30 @@ export class ProfilePage implements OnInit {
     pageSize: this.pageSize(),
     total: this.total(),
     selectionMode: 'multiple',
-    showCheckbox: true,
-    showIndexColumn: true,
-    showSearch: true,
+    showCheckbox: this.selectionColumnVisible(),
+    showIndexColumn: this.indexColumnVisible(),
+    showSearch: this.tableSearchVisible(),
     showFilter: true,
     showSort: true,
     showSettings: true,
     showPrimaryAction: true,
-    showActionColumn: true,
+    showActionColumn: this.actionColumnVisible(),
+    isActionColumnVisible: this.actionColumnVisible(),
     showPaginationQuickActions: true,
     showPaginator: true,
     enableColumnResize: true,
     rowsPerPageOptions: [5, 10, 20, 50],
-    searchPlaceholder: 'Search .....',
+    searchPlaceholder: 'Search ...',
     searchMode: 'server',
     showSearchClear: true,
-    showQuickJumper: true,
     scrollable: true,
-    scrollX: 'max-content',
-    scroll: { x: 'max-content' },
+    lockBodyHeight: true,
+    tableBodyHeight: '420px',
     tableLayout: 'fixed',
+    defaultColumnWidth: '160px',
+    selectionColumnWidth: '40px',
+    indexColumnWidth: '48px',
+    actionColumnWidth: '40px',
     paginationPosition: 'bottom',
     searchTerm: this.tableSearchTerm(),
     selectedRows: this.selectedRows(),
@@ -263,7 +290,7 @@ export class ProfilePage implements OnInit {
     primaryActionOptions: [
       {
         key: 'create',
-        label: 'Thêm',
+        label: 'Tạo mới',
         icon: 'plus',
         type: 'primary',
         selected: this.activePrimaryActionKey() === 'create',
@@ -276,6 +303,27 @@ export class ProfilePage implements OnInit {
         selected: this.activePrimaryActionKey() === 'edit',
       },
       {
+        key: 'approve',
+        label: 'Phê duyệt',
+        icon: 'check',
+        type: 'default',
+        selected: this.activePrimaryActionKey() === 'approve',
+      },
+      {
+        key: 'import',
+        label: 'Import',
+        icon: 'upload',
+        type: 'default',
+        selected: this.activePrimaryActionKey() === 'import',
+      },
+      {
+        key: 'export',
+        label: 'Export',
+        icon: 'download',
+        type: 'default',
+        selected: this.activePrimaryActionKey() === 'export',
+      },
+      {
         key: 'delete',
         label: 'Xóa',
         icon: 'delete',
@@ -285,15 +333,22 @@ export class ProfilePage implements OnInit {
       },
     ],
     actionColumnOptions: [
-      { key: 'detail', label: 'Chi tiết', checked: this.enabledActionColumnKeys().includes('detail') },
-      { key: 'edit', label: 'Sửa', checked: this.enabledActionColumnKeys().includes('edit') },
-      { key: 'delete', label: 'Xóa', checked: this.enabledActionColumnKeys().includes('delete') },
+      {
+        key: 'detail',
+        label: 'Chi tiết',
+        checked: this.enabledActionColumnKeys().includes('detail'),
+      },
+      {
+        key: 'edit',
+        label: 'Sửa',
+        checked: this.enabledActionColumnKeys().includes('edit'),
+      },
+      {
+        key: 'delete',
+        label: 'Xóa',
+        checked: this.enabledActionColumnKeys().includes('delete'),
+      },
     ],
-    filterDrawerTitle: 'Bộ lọc nâng cao',
-    sortDrawerTitle: 'Sắp xếp dữ liệu',
-    settingsDrawerTitle: 'Thiết lập bảng',
-    primaryDrawerTitle: 'Thao tác chính',
-    actionColumnDrawerTitle: 'Hiển thị thao tác',
   }));
 
   protected readonly currentUserName = computed(
@@ -425,18 +480,32 @@ export class ProfilePage implements OnInit {
 
   onTableToolbarAction(event: ProfileTableToolbarActionEvent): void {
     if (event.type === 'reload') {
-      this.fetchUsers(true, { pageIndex: this.pageIndex(), pageSize: this.pageSize() });
+      this.resetTableQueryState();
+      this.fetchUsers(true, { pageIndex: 1, pageSize: this.pageSize() });
+      return;
     }
     if (event.type === 'primary') {
+      const activeRow = this.currentUser() ?? this.selectedRows()[0] ?? null;
       switch (this.activePrimaryActionKey()) {
         case 'edit':
-          if (this.currentUser()) {
-            this.openEdit(this.currentUser()!);
+          if (activeRow) {
+            this.openEdit(activeRow);
           }
           break;
-        case 'delete':
+        case 'approve':
           if (this.currentUser()) {
-            this.deleteRow(this.currentUser()!);
+            // this.approveRow(this.currentUser()!);
+          }
+          break;
+        case 'import':
+          this.error.set('Chức năng import đang chờ');
+          break;
+        case 'export':
+          // this.exportRows();
+          break;
+        case 'delete':
+          if (activeRow) {
+            this.deleteRow(activeRow);
           }
           break;
         default:
@@ -453,8 +522,12 @@ export class ProfilePage implements OnInit {
     this.enabledActionColumnKeys.set(event.enabledKeys);
   }
 
-  onVisibleColumnsChange(_: ProfileVisibleColumnsChangeEvent): void {
-    return;
+  onVisibleColumnsChange(event: ProfileVisibleColumnsChangeEvent): void {
+    this.visibleColumnKeys.set(event.visibleColumnKeys);
+    this.tableSearchVisible.set(event.isSearchVisible);
+    this.selectionColumnVisible.set(event.isSelectionColumnVisible);
+    this.indexColumnVisible.set(event.isIndexColumnVisible);
+    this.actionColumnVisible.set(event.isActionColumnVisible);
   }
 
   createUser(): void {
@@ -508,7 +581,7 @@ export class ProfilePage implements OnInit {
         this.editorLoading.set(false);
         this.editorVisible.set(false);
         if (this.editorMode() === 'create') {
-          this.sortBy.set('id');
+          this.sortBy.set('username');
           this.sortOrder.set('descend');
           this.fetchUsers(true, { pageIndex: 1, pageSize: this.pageSize() });
           return;
@@ -608,6 +681,22 @@ export class ProfilePage implements OnInit {
       `pageSize=${pageSize}`,
       `position=${this.positionFilter()}`,
     ].join('&');
+  }
+
+  private resetTableQueryState(): void {
+    this.tableSearchTerm.set('');
+    this.sortBy.set('username');
+    this.sortOrder.set('ascend');
+    this.positionFilter.set('');
+    this.pageIndex.set(1);
+    this.tableSearchVisible.set(true);
+    this.selectionColumnVisible.set(true);
+    this.indexColumnVisible.set(true);
+    this.actionColumnVisible.set(true);
+    this.visibleColumnKeys.set(['username', 'fullName', 'email', 'position', 'roles']);
+    this.selectedRows.set([]);
+    this.currentUser.set(null);
+    this.error.set(null);
   }
 
   private openEditor(mode: 'create' | 'edit' | 'detail', row?: UserRow): void {
