@@ -93,7 +93,6 @@ export class ProfilePage implements OnInit {
   protected readonly sortBy = signal('username');
   protected readonly sortOrder = signal<SsTableSortOrder>('ascend');
   protected readonly positionFilter = signal('');
-  // protected readonly positionOptions = ['USER', 'ADMIN', 'MANAGER', 'DEVELOPER'];
   protected readonly activePrimaryActionKey = signal('create');
   protected readonly enabledActionColumnKeys = signal<string[]>(['detail', 'edit', 'delete']);
   protected readonly visibleColumnKeys = signal<string[]>(['username', 'fullName', 'email', 'position', 'roles']);
@@ -468,110 +467,145 @@ export class ProfilePage implements OnInit {
       {
         key: 'username',
         header: 'Username',
-        sortable: true,
-        width: '180px',
-        visible: visibleColumnKeys.has('username'),
-        sortOrder: activeSortBy === 'username' ? activeSortOrder : null,
+        query: {
+          sortable: true,
+          sortOrder: activeSortBy === 'username' ? activeSortOrder : null,
+        },
+        ui: {
+          width: '180px',
+          visible: visibleColumnKeys.has('username'),
+        },
       },
       {
         key: 'fullName',
         header: 'Full name',
-        sortable: true,
-        width: '220px',
-        visible: visibleColumnKeys.has('fullName'),
-        sortOrder: activeSortBy === 'fullName' ? activeSortOrder : null,
+        query: {
+          sortable: true,
+          sortOrder: activeSortBy === 'fullName' ? activeSortOrder : null,
+        },
+        ui: {
+          width: '220px',
+          visible: visibleColumnKeys.has('fullName'),
+        },
       },
       {
         key: 'email',
         header: 'Email',
         type: 'email',
-        sortable: true,
-        width: '240px',
-        visible: visibleColumnKeys.has('email'),
-        sortOrder: activeSortBy === 'email' ? activeSortOrder : null,
+        query: {
+          sortable: true,
+          sortOrder: activeSortBy === 'email' ? activeSortOrder : null,
+        },
+        ui: {
+          width: '240px',
+          visible: visibleColumnKeys.has('email'),
+        },
       },
       {
         key: 'position',
         header: 'Position',
         type: 'status',
-        sortable: true,
-        width: '150px',
-        visible: visibleColumnKeys.has('position'),
-        sortOrder: activeSortBy === 'position' ? activeSortOrder : null,
         options: [
           { label: 'USER', value: 'USER', color: 'green' },
           { label: 'ADMIN', value: 'ADMIN', color: 'blue' },
           { label: 'MANAGER', value: 'MANAGER', color: 'gold' },
           { label: 'DEVELOPER', value: 'DEVELOPER', color: 'purple' },
         ],
-        filters: [
-          { text: 'USER', value: 'USER', byDefault: activePositionFilter === 'USER' },
-          { text: 'ADMIN', value: 'ADMIN', byDefault: activePositionFilter === 'ADMIN' },
-          { text: 'MANAGER', value: 'MANAGER', byDefault: activePositionFilter === 'MANAGER' },
-          { text: 'DEVELOPER', value: 'DEVELOPER', byDefault: activePositionFilter === 'DEVELOPER' },
-        ],
+        query: {
+          sortable: true,
+          sortOrder: activeSortBy === 'position' ? activeSortOrder : null,
+          filters: [
+            { text: 'USER', value: 'USER', byDefault: activePositionFilter === 'USER' },
+            { text: 'ADMIN', value: 'ADMIN', byDefault: activePositionFilter === 'ADMIN' },
+            { text: 'MANAGER', value: 'MANAGER', byDefault: activePositionFilter === 'MANAGER' },
+            { text: 'DEVELOPER', value: 'DEVELOPER', byDefault: activePositionFilter === 'DEVELOPER' },
+          ],
+        },
+        ui: {
+          width: '150px',
+          visible: visibleColumnKeys.has('position'),
+        },
       },
-      { key: 'roles', header: 'Roles', type: 'array', width: '220px', visible: visibleColumnKeys.has('roles') },
+      {
+        key: 'roles',
+        header: 'Roles',
+        type: 'array',
+        ui: {
+          width: '220px',
+          visible: visibleColumnKeys.has('roles'),
+        },
+      },
       {
         key: 'actions',
         header: 'Actions',
         type: 'action',
         actions: this.rowActions,
-        width: '40px',
-        align: 'center',
+        ui: {
+          width: '40px',
+          align: 'center',
+        },
       },
-    ];
+    ] as unknown as SsTableColumnConfig<UserRow>[];
   }
 
   private buildTableConfig(): SsTableConfig<UserRow> {
     return {
-      title: 'Users table',
       bordered: true,
       size: 'middle',
       loading: this.loading(),
       loadingType: 'spinner',
       lazy: true,
-      pageIndex: this.pageIndex(),
-      pageSize: this.pageSize(),
-      total: this.total(),
-      selectionMode: 'multiple',
-      showCheckbox: this.selectionColumnVisible(),
-      showIndexColumn: this.indexColumnVisible(),
-      showSearch: this.tableSearchVisible(),
-      showFilter: true,
-      showSort: true,
-      showSettings: true,
-      showPrimaryAction: true,
-      showActionColumn: this.actionColumnVisible(),
-      isActionColumnVisible: this.actionColumnVisible(),
-      showPaginationQuickActions: true,
-      showPaginator: true,
-      enableColumnResize: true,
-      rowsPerPageOptions: [5, 10, 20, 50],
-      searchPlaceholder: 'Search ...',
-      searchMode: 'server',
-      showSearchClear: true,
-      scrollable: true,
-      lockBodyHeight: true,
-      tableBodyHeight: '420px',
-      tableLayout: 'fixed',
-      defaultColumnWidth: '160px',
-      selectionColumnWidth: '40px',
-      indexColumnWidth: '48px',
-      actionColumnWidth: '40px',
-      searchTerm: this.tableSearchTerm(),
-      selectedRows: this.selectedRows(),
       rowKey: 'username',
       emptyTitle: 'Không có dữ liệu',
       emptyMessage: 'Thử thay đổi bộ lọc hoặc tải lại danh sách.',
-      sortMode: 'multiple',
-      primaryActionOptions: this.buildPrimaryActionOptions(),
-      actionColumnOptions: [
-        { key: 'detail', label: 'Chi tiết', checked: this.enabledActionColumnKeys().includes('detail') },
-        { key: 'edit', label: 'Sửa', checked: this.enabledActionColumnKeys().includes('edit') },
-        { key: 'delete', label: 'Xóa', checked: this.enabledActionColumnKeys().includes('delete') },
-      ],
-    };
+      toolbar: {
+        search: {
+          visible: this.tableSearchVisible(),
+          term: this.tableSearchTerm(),
+          placeholder: 'Search ...',
+          mode: 'server',
+          clearable: true,
+        },
+        filter: true,
+        sort: true,
+        settings: true,
+        primary: true,
+      },
+      pagination: {
+        visible: true,
+        pageIndex: this.pageIndex(),
+        pageSize: this.pageSize(),
+        total: this.total(),
+        pageSizeOptions: [5, 10, 20, 50],
+        quickActions: true,
+      },
+      selection: {
+        mode: 'multiple',
+        selectedRows: this.selectedRows(),
+        showCheckbox: this.selectionColumnVisible(),
+        showIndex: this.indexColumnVisible(),
+      },
+      scroll: {
+        enabled: true,
+        y: '420px',
+      },
+      columns: {
+        resizable: true,
+        defaultWidth: '160px',
+        selectionWidth: '40px',
+        indexWidth: '48px',
+      },
+      actionColumn: {
+        visible: this.actionColumnVisible(),
+        width: '40px',
+        options: [
+          { key: 'detail', label: 'Chi tiết', checked: this.enabledActionColumnKeys().includes('detail') },
+          { key: 'edit', label: 'Sửa', checked: this.enabledActionColumnKeys().includes('edit') },
+          { key: 'delete', label: 'Xóa', checked: this.enabledActionColumnKeys().includes('delete') },
+        ],
+      },
+      primaryActions: this.buildPrimaryActionOptions(),
+    } as unknown as SsTableConfig<UserRow>;
   }
 
   private buildPrimaryActionOptions() {
