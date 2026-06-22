@@ -309,7 +309,7 @@ export class ProfilePage implements OnInit {
           break;
         case 'delete':
           if (activeRow) {
-            this.deleteRow(activeRow);
+            this.deleteSelected();
           }
           break;
         default:
