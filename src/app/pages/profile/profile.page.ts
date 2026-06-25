@@ -92,7 +92,7 @@ export class ProfilePage implements OnInit {
   protected readonly tableSearchTerm = signal('');
   protected readonly pageIndex = signal(1);
   protected readonly pageSize = signal(10);
-  protected readonly sortState = signal<TableSortState>([{ key: 'username', value: 'ascend' }]);
+  protected readonly sortState = signal<TableSortState>([]);
   protected readonly filters = signal<Record<string, string | string[]>>({});
   protected readonly activePrimaryActionKey = signal('create');
   protected readonly enabledActionColumnKeys = signal<string[]>(['detail', 'edit', 'delete']);
@@ -471,7 +471,7 @@ export class ProfilePage implements OnInit {
           filterPlaceholder: 'Tìm theo username',
         },
         ui: {
-          width: '180px',
+          width: '110px',
           visible: visibleColumnKeys.has('username'),
         },
       },
@@ -485,7 +485,7 @@ export class ProfilePage implements OnInit {
           filterPlaceholder: 'Tìm theo họ tên',
         },
         ui: {
-          width: '220px',
+          width: '170px',
           visible: visibleColumnKeys.has('fullName'),
         },
       },
@@ -500,7 +500,7 @@ export class ProfilePage implements OnInit {
           filterPlaceholder: 'Tìm theo email',
         },
         ui: {
-          width: '240px',
+          width: '170px',
           visible: visibleColumnKeys.has('email'),
         },
       },
@@ -538,7 +538,7 @@ export class ProfilePage implements OnInit {
           filterPlaceholder: 'Tìm theo roles',
         },
         ui: {
-          width: '220px',
+          width: '130px',
           visible: visibleColumnKeys.has('roles'),
         },
       },
@@ -548,7 +548,7 @@ export class ProfilePage implements OnInit {
         type: 'action',
         actions: this.rowActions,
         ui: {
-          width: '40px',
+          width: '100px',
           align: 'center',
         },
       },
