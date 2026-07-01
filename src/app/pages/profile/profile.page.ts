@@ -21,6 +21,7 @@ import {
   SsTableSelectionChangeEvent,
   SsTableSearchChangeEvent,
   SsTableSortChangeEvent,
+  SsTableSortItem,
   SsTableSortOrder,
   SsTableToolbarActionEvent,
   SsTableVisibleColumnsChangeEvent,
@@ -58,7 +59,7 @@ interface PrimaryActionFlags {
   delete: boolean;
 }
 
-type TableSortState = Array<{ key: string; value: SsTableSortOrder }>;
+type TableSortState = SsTableSortItem[];
 
 @Component({
   selector: 'app-profile-page',
@@ -244,12 +245,14 @@ export class ProfilePage implements OnInit {
   }
 
   onTableSortChange(event: SsTableSortChangeEvent): void {
-    const nextSort = (event.sort ?? []).filter((item) => item.value);
+    const nextSort = (event.sort ?? [])
+      .filter((item) => item.order)
+      .sort((left, right) => left.displayOrder - right.displayOrder);
     if (JSON.stringify(this.sortState()) === JSON.stringify(nextSort)) {
       return;
     }
     this.sortState.set(nextSort);
-    this.fetchUsers(false, { pageIndex: 1, pageSize: this.pageSize() });
+    this.fetchUsers(false, { pageIndex: (event as SsTableSortChangeEvent & { pageIndex?: number }).pageIndex ?? 1, pageSize: (event as SsTableSortChangeEvent & { pageSize?: number }).pageSize ?? this.pageSize() });
   }
 
   onTableFilterChange(event: SsTableFilterChangeEvent): void {
@@ -269,7 +272,7 @@ export class ProfilePage implements OnInit {
       return;
     }
     this.filters.set(nextFilters);
-    this.fetchUsers(false, { pageIndex: 1, pageSize: this.pageSize() });
+    this.fetchUsers(false, { pageIndex: (event as SsTableFilterChangeEvent & { pageIndex?: number }).pageIndex ?? 1, pageSize: (event as SsTableFilterChangeEvent & { pageSize?: number }).pageSize ?? this.pageSize() });
   }
 
   onTableSearchChange(event: SsTableSearchChangeEvent): void {
@@ -278,7 +281,7 @@ export class ProfilePage implements OnInit {
       return;
     }
     this.tableSearchTerm.set(nextSearchTerm);
-    this.fetchUsers(false, { pageIndex: 1, pageSize: this.pageSize() });
+    this.fetchUsers(false, { pageIndex: (event as SsTableSearchChangeEvent & { pageIndex?: number }).pageIndex ?? 1, pageSize: (event as SsTableSearchChangeEvent & { pageSize?: number }).pageSize ?? this.pageSize() });
   }
 
   onTableToolbarAction(event: SsTableToolbarActionEvent): void {
@@ -384,7 +387,7 @@ export class ProfilePage implements OnInit {
         this.editorLoading.set(false);
         this.editorVisible.set(false);
         if (this.editorMode() === 'create') {
-          this.sortState.set([{ key: 'username', value: 'descend' }]);
+          this.sortState.set([{ key: 'username', value: 'descend', col: 'username', order: 'descend', displayOrder: 1 }]);
           this.fetchUsers(true, { pageIndex: 1, pageSize: this.pageSize() });
           return;
         }
@@ -456,7 +459,7 @@ export class ProfilePage implements OnInit {
   }
 
   private buildTableColumns(): SsTableColumnConfig<UserRow>[] {
-    const activeSort = new Map(this.sortState().map((item) => [item.key, item.value]));
+    const activeSort = new Map(this.sortState().map((item) => [item.key, item.order]));
     const activeFilters = this.filters();
     const visibleColumnKeys = new Set(this.visibleColumnKeys());
 
@@ -533,10 +536,10 @@ export class ProfilePage implements OnInit {
         key: 'roles',
         header: 'Roles',
         type: 'array',
-        query: {
-          filterType: 'text',
-          filterPlaceholder: 'Tìm theo roles',
-        },
+        // query: {
+        //   filterType: 'text',
+        //   filterPlaceholder: 'Tìm theo roles',
+        // },
         ui: {
           width: '130px',
           visible: visibleColumnKeys.has('roles'),
@@ -637,15 +640,17 @@ export class ProfilePage implements OnInit {
   private buildQuery(nextPageState?: { pageIndex?: number; pageSize?: number }): HttpParams {
     const pageIndex = nextPageState?.pageIndex ?? this.pageIndex();
     const pageSize = nextPageState?.pageSize ?? this.pageSize();
-    const activeSort = this.sortState().filter((item) => item.value);
-    const primarySort = activeSort[0] ?? { key: 'username', value: 'ascend' as SsTableSortOrder };
+    const activeSort = this.sortState()
+      .filter((item) => item.order)
+      .sort((left, right) => left.displayOrder - right.displayOrder);
     let params = new HttpParams()
       .set('search', this.tableSearchTerm())
-      .set('sortBy', primarySort.key)
-      .set('sortOrder', primarySort.value ?? '')
-      .set('sort', JSON.stringify(activeSort))
       .set('pageIndex', String(pageIndex))
       .set('pageSize', String(pageSize));
+
+    for (const item of activeSort.length ? activeSort : [{ key: 'username', value: 'ascend' as SsTableSortOrder, col: 'username', order: 'ascend' as SsTableSortOrder, displayOrder: 1 }]) {
+      params = params.append('sort', `${item.col},${item.order ?? 'ascend'}`);
+    }
 
     for (const [key, value] of Object.entries(this.filters())) {
       params = params.set(key, Array.isArray(value) ? value.join(',') : value);
@@ -668,7 +673,7 @@ export class ProfilePage implements OnInit {
 
   private resetTableQueryState(): void {
     this.tableSearchTerm.set('');
-    this.sortState.set([{ key: 'username', value: 'ascend' }]);
+    this.sortState.set([{ key: 'username', value: 'ascend', col: 'username', order: 'ascend', displayOrder: 1 }]);
     this.filters.set({});
     this.pageIndex.set(1);
     this.tableSearchVisible.set(true);
